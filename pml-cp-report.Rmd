@@ -1,0 +1,149 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "CY Kan"
+date: "Sunday, August 24, 2014"
+output: html_document
+---
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Data
+
+The training data for this project are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+## Goal
+
+The goal is to predict the manner in which they did the exercise. This is the ```classe``` variable in the training set. Task include:
+
+1. create a report describing how the model is built
+2. How cross validation is used
+3. What is the expected out of sample error
+4. Why the choices are made
+5. Use prediction model to predict 20 different test cases
+
+## Sequence of Steps
+
+### Step 1: Load Library
+
+Caret library is loaded.
+
+```{r}
+## load libraries caret and randon forest
+library(caret)
+library(randomForest)
+```
+
+### Step 2: Import the Data Files
+
+The data files are downloaded and extracted to local drive. Now they are loaded with handling of NAs.
+
+```{r}
+## read data in pml-training.csv into trainTruth
+trainTruth <- read.csv('pml-training.csv', sep=',', header=T, na.strings=c('', 'NA', '#DIV/0!'))
+
+## read data in pml-testing.csv into testTruth
+testTruth <- read.csv('pml-testing.csv', sep=',', header=T, na.strings=c('', 'NA', '#DIV/0!'))
+```
+
+### Step 3: Partition the training data
+
+```trainTruth``` data is separated into a training set (75%) and a validation set (25%), respectively. The training set is to train the prediction model while the validation set is used to validate that prediction model.
+
+```{r}
+## set random seed
+set.seed(54321)
+
+## use 75% of trainTruth data to be the training data of the prediction model
+inTrain <- createDataPartition(trainTruth$classe, p=0.75, list=F)
+
+train <- trainTruth[inTrain,] ## the training data set
+valid <- trainTruth[-inTrain,] ## the validation data set
+```
+
+### Step 4: Data Cleansing
+
+As not all columns are related to ```classe```, a number of columns are removed from ```train``` data set. For example, descriptive columns, columns containing a lot of NAs or empty value, and columns with nearly zero variance.
+
+```{r}
+## remove descriptive columns
+exclcol <- c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+train <- train[, !(names(train) %in% exclcol)]
+
+## remove near zero variance
+train <- train[,-nearZeroVar(train)]
+
+## remove columns containing a lot of NAs or empty value
+nas <- apply(train, 2, function(x) { sum(is.na(x) || sum(x=='')) })
+train <- train[, which(nas == 0)]
+```
+
+### Step 5: Prediction Model Training
+
+Random Forest will be used for the prediction model.
+
+```{r}
+modFit <- randomForest(classe ~ ., data=train, importance=T, ntrees=10)
+```
+
+### Step 6: Training Data Set Accuracy
+
+```{r}
+## predict with the train data set
+pTrain <- predict(modFit, train)
+
+## show performance of the prediction
+print(confusionMatrix(pTrain, train$classe))
+```
+
+The prediction model performs very good against the training data set with an accuracy of 100%.
+
+### Step 7: Cross Validation
+
+```{r}
+## cross validate the prediction model with the valid data set
+pValid <- predict(modFit, valid)
+
+## show performance of the prediction
+print(confusionMatrix(pValid, valid$classe))
+```
+
+With the validation data set for cross validation, the prediction model still performs very good with an accuracy of 99.45%. Therefore the out-of-sample error is 0.55%.
+
+### Step 8: Prediction on Test Data Set
+
+The prediction model is then applied to the ```testTruth``` data set.
+
+```{r}
+## predict the testTruth data set
+pTest <- predict(modFit, testTruth)
+
+## show prediction results
+pTest
+```
+
+### Step 9: Output Test Prediction Results
+
+The following function, ```pml_write_files```, writes each prediction result of the 20 test cases into individual files for prediction assignment submission.
+
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+## create file for Prediction Assignment Submission
+pml_write_files(pTest)
+```
